@@ -12,6 +12,12 @@ services:
     depends_on:
       - app
     restart: unless-stopped
+    environment:
+      - VIRTUAL_HOST=deepstupid.com
+      - LETSENCRYPT_HOST=deepstupid.com
+      - LETSENCRYPT_EMAIL=mayhem@gmail.com
+    networks:
+      - ssl-proxy-network
 
   app:
     build: .
@@ -57,6 +63,13 @@ services:
     depends_on:
       - redis
     restart: unless-stopped
+
+networks:
+  ssl-proxy-network:
+    name: nginx-proxy
+    external: true
+  default:
+    name: app-network
 
 volumes:
   nginx_cache:
