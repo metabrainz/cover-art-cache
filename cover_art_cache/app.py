@@ -18,7 +18,7 @@ from flask import Flask, Response, request, jsonify
 import redis
 import requests
 
-from cache import (
+from .cache import (
     CACHE_DIR, MAX_CACHE_SIZE, COVERART_BASE_URL, MBID_PATTERN,
     REDIS_CACHE_ITEMS_KEY, REDIS_TOTAL_BYTES_KEY,
     CACHE_TYPE_RELEASE, CACHE_TYPE_RELEASE_GROUP,
@@ -429,7 +429,7 @@ def handle_coverart_request_rg(mbid: str, path: str = "", size: str = ""):
     for ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp']:
         cache_path = get_cache_path("release-group", cache_key, ext)
         if cache_path.exists():
-            logger.info(f"Cache hit for {coverart_url}")
+            #logger.info(f"Cache hit for {coverart_url}")
             # Use X-Accel-Redirect for efficient nginx file serving
             cache_file = f"/cache-files/{cache_path.relative_to(CACHE_DIR)}"
             headers = {
@@ -441,7 +441,7 @@ def handle_coverart_request_rg(mbid: str, path: str = "", size: str = ""):
             return Response("", headers=headers)
     
     # Cache miss - need to download the image
-    logger.info(f"Cache miss for {coverart_url}")
+    #logger.info(f"Cache miss for {coverart_url}")
     
     try:
         # Resolve the redirect to get actual image URL

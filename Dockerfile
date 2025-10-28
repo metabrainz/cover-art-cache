@@ -16,8 +16,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code and configuration
-COPY cache.py .
-COPY app.py .
+COPY cover_art_cache/ ./cover_art_cache/
 COPY uwsgi.ini .
 
 # Create cache directory structure and log directory with proper permissions

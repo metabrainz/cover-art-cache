@@ -6,6 +6,7 @@ Thumbs.db
 # Cache data (if mounted locally)
 cache/*
 !cache/.gitkeep
+__pycache__
 
 # Logs (if mounted locally)  
 logs/*
@@ -15,6 +16,10 @@ logs/*
 .env
 .env.local
 .env.production
+
+# venv files
+.venv
+.ve
 
 # IDE files
 .vscode/

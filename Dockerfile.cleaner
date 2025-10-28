@@ -12,12 +12,11 @@ COPY requirements_cleaner.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy cleaner service
-COPY cache.py .
-COPY cleaner_service.py .
+COPY cover_art_cache/ ./cover_art_cache/
 
 # Health check
 HEALTHCHECK --interval=60s --timeout=10s --start-period=5s --retries=3 \
     CMD pgrep -f cleaner_service.py || exit 1
 
 # Run the cleaner service
-CMD ["python", "cleaner_service.py"]
+CMD ["python", "-m", "cover_art_cache.cleaner_service"]

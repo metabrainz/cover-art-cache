@@ -25,7 +25,7 @@ logging.basicConfig(
 logger = logging.getLogger('cleanup_service')
 
 # Import shared definitions
-from cache import (
+from .cache import (
     CACHE_DIR, MAX_CACHE_SIZE, CLEANUP_INTERVAL, CLEANUP_THRESHOLD, CLEANUP_TARGET,
     REDIS_CACHE_ITEMS_KEY, REDIS_TOTAL_BYTES_KEY, REDIS_CLEANUP_LOCK_KEY,
     format_bytes_mb
