@@ -186,9 +186,6 @@ def download_image(url: str, cache_path: Path, cache_type: str, mbid: str, cache
                 f.write(chunk)
                 downloaded_bytes += len(chunk)
         
-        logger.info(f"Successfully downloaded image to {cache_path} ({downloaded_bytes} bytes)")
-        
-        # Add to cache index
         cache_item = CacheItem(
             cache_type=cache_type,
             mbid=mbid,

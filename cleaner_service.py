@@ -133,7 +133,6 @@ class CacheCleanupService:
         cleanup_threshold_size = int(MAX_CACHE_SIZE * CLEANUP_THRESHOLD)
         
         if current_size <= cleanup_threshold_size:
-            logger.debug(f"Cache size ({format_bytes_mb(current_size)}MB) below cleanup threshold ({format_bytes_mb(cleanup_threshold_size)}MB)")
             return
         
         # Try to acquire cleanup lock
@@ -152,8 +151,7 @@ class CacheCleanupService:
             target_size = int(MAX_CACHE_SIZE * CLEANUP_TARGET)
             bytes_to_free = current_size - target_size
             
-            logger.info(f"Starting cache cleanup: current {format_bytes_mb(current_size)}MB, target {format_bytes_mb(target_size)}MB")
-            logger.info(f"Need to free {format_bytes_mb(bytes_to_free)}MB")
+            logger.info(f"cache cleanup start: {format_bytes_mb(current_size)}MB, target {format_bytes_mb(target_size)}MB")
             
             # Get oldest items
             oldest_items = self.get_oldest_items(1000)  # Get up to 1000 oldest items
@@ -188,8 +186,7 @@ class CacheCleanupService:
                     self.remove_cache_item(item_data.get('cache_key', ''))
             
             final_size = self.get_total_bytes()
-            logger.info(f"Cache cleanup complete: removed {removed_count} files, freed {format_bytes_mb(freed_bytes)}MB")
-            logger.info(f"New cache size: {format_bytes_mb(final_size)}MB ({final_size / MAX_CACHE_SIZE * 100:.1f}% of limit)")
+            logger.info(f"cache cleanup end: {format_bytes_mb(final_size)}MB, target {format_bytes_mb(target_size)}MB")
             
         finally:
             self.release_cleanup_lock()
