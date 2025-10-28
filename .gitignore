@@ -1,0 +1,31 @@
+# Docker and build artifacts
+*.log
+.DS_Store
+Thumbs.db
+
+# Cache data (if mounted locally)
+cache/*
+!cache/.gitkeep
+
+# Logs (if mounted locally)  
+logs/*
+!logs/.gitkeep
+
+# Environment files
+.env
+.env.local
+.env.production
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Backup files
+*.bak
+*.backup
+
+# Temporary files
+*.tmp
+*.temp

@@ -1,0 +1,67 @@
+services:
+  nginx:
+    image: nginx:alpine
+    container_name: cover-art-cache-nginx
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - nginx_cache:/var/cache/nginx
+      - nginx_logs:/var/log/nginx
+      - ${COVER_ART_CACHE_DIR}:/var/cache/nginx/images
+    depends_on:
+      - app
+    restart: unless-stopped
+
+  app:
+    build: .
+    container_name: cover-art-cache-app
+    environment:
+      - PYTHONUNBUFFERED=1
+      - COVER_ART_CACHE_MAX_SIZE=${COVER_ART_CACHE_MAX_SIZE}
+    volumes:
+      - ${COVER_ART_CACHE_DIR}:/var/cache/nginx/images
+    depends_on:
+      - redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  redis:
+    image: redis:7-alpine
+    container_name: cover-art-cache-redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  cleaner:
+    build:
+      context: .
+      dockerfile: Dockerfile.cleaner
+    container_name: cover-art-cache-cleaner
+    environment:
+      - PYTHONUNBUFFERED=1
+      - COVER_ART_CACHE_MAX_SIZE=${COVER_ART_CACHE_MAX_SIZE}
+      - COVER_ART_CACHE_CLEANUP_INTERVAL=${COVER_ART_CACHE_CLEANUP_INTERVAL}
+    volumes:
+      - ${COVER_ART_CACHE_DIR}:/var/cache/nginx/images
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+volumes:
+  nginx_cache:
+    driver: local
+  nginx_logs:
+    driver: local
+  redis_data:
+    driver: local
