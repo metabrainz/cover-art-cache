@@ -1,32 +1,9 @@
 services:
-  nginx:
-    image: nginx:alpine
-    container_name: cover-art-cache-nginx
-    ports:
-      - "8080:8080"
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - nginx_cache:/var/cache/nginx
-      - nginx_logs:/var/log/nginx
-      - ${COVER_ART_CACHE_DIR}:/var/cache/nginx/images
-    depends_on:
-      - app
-    restart: unless-stopped
-    environment:
-      - VIRTUAL_HOST=deepstupid.com
-      - LETSENCRYPT_HOST=deepstupid.com
-      - LETSENCRYPT_EMAIL=mayhem@gmail.com
-    networks:
-      - ssl-proxy-network
-
   app:
     build: .
     container_name: cover-art-cache-app
-    environment:
-      - PYTHONUNBUFFERED=1
-      - COVER_ART_CACHE_MAX_SIZE=${COVER_ART_CACHE_MAX_SIZE}
     volumes:
-      - ${COVER_ART_CACHE_DIR}:/var/cache/nginx/images
+      - ${COVER_ART_CACHE_DIR}:/cache
     depends_on:
       - redis
     restart: unless-stopped
@@ -35,6 +12,15 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    user: "1000:1000"
+    environment:
+      - COVER_ART_CACHE_MAX_SIZE=${COVER_ART_CACHE_MAX_SIZE}
+      - VIRTUAL_HOST=deepstupid.com
+      - LETSENCRYPT_HOST=deepstupid.com
+      - LETSENCRYPT_EMAIL=mayhem@gmail.com
+    networks:
+      - ssl-proxy-network
+      - cache-network
 
   redis:
     image: redis:7-alpine
@@ -48,6 +34,9 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    networks:
+      - ssl-proxy-network
+      - cache-network
 
   cleaner:
     build:
@@ -63,13 +52,15 @@ services:
     depends_on:
       - redis
     restart: unless-stopped
+    networks:
+      - cache-network
 
 networks:
   ssl-proxy-network:
     name: nginx-proxy
     external: true
-  default:
-    name: app-network
+  cache-network:
+    name: cache-network
 
 volumes:
   nginx_cache:

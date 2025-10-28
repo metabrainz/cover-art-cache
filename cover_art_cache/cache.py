@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 # Cache configuration
-CACHE_DIR = Path("/var/cache/nginx/images")
+CACHE_DIR = Path("/cache")
 MAX_CACHE_SIZE = int(os.environ.get('COVER_ART_CACHE_MAX_SIZE', '100')) * 1024 * 1024  # Convert MB to bytes
 CLEANUP_INTERVAL = int(os.environ.get('COVER_ART_CACHE_CLEANUP_INTERVAL', '300'))  # Default 5 minutes
 

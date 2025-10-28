@@ -345,6 +345,10 @@ def handle_coverart_request(mbid: str, path: str = "", size: str = ""):
         logger.error(f"Unexpected error: {e}")
         return jsonify({"error": "Internal server error"}), 500
 
+@app.route("/")
+def index():
+    return "bruh!"
+
 # Release endpoints
 @app.route("/release/<mbid>/")
 def get_release_all(mbid):
