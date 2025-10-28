@@ -24,12 +24,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger('cleanup_service')
 
-# Configuration
-CACHE_DIR = Path("/var/cache/nginx/images")
-MAX_CACHE_SIZE = int(os.environ.get('COVER_ART_CACHE_MAX_SIZE', '100')) * 1024 * 1024  # Convert MB to bytes
-CLEANUP_INTERVAL = int(os.environ.get('COVER_ART_CACHE_CLEANUP_INTERVAL', '300'))  # Default 5 minutes
-CLEANUP_THRESHOLD = 0.95  # Start cleanup when cache is 90% full
-CLEANUP_TARGET = 0.9    # Clean down to 80% of max size
+# Import shared definitions
+from cache import (
+    CACHE_DIR, MAX_CACHE_SIZE, CLEANUP_INTERVAL, CLEANUP_THRESHOLD, CLEANUP_TARGET,
+    REDIS_CACHE_ITEMS_KEY, REDIS_TOTAL_BYTES_KEY, REDIS_CLEANUP_LOCK_KEY,
+    format_bytes_mb
+)
 
 # Redis connection
 try:
@@ -39,11 +39,6 @@ try:
 except Exception as e:
     logger.error(f"Failed to connect to Redis: {e}")
     sys.exit(1)
-
-# Redis keys (must match app.py)
-CACHE_ITEMS_KEY = "cache:items"
-TOTAL_BYTES_KEY = "cache:total_bytes"
-CLEANUP_LOCK_KEY = "cache:cleanup_lock"
 
 class CacheCleanupService:
     """Service that manages cache cleanup operations."""
@@ -64,7 +59,7 @@ class CacheCleanupService:
     def get_total_bytes(self) -> int:
         """Get total cache size from Redis."""
         try:
-            total = self.redis.get(TOTAL_BYTES_KEY)
+            total = self.redis.get(REDIS_TOTAL_BYTES_KEY)
             return int(total) if total else 0
         except Exception as e:
             logger.error(f"Error getting total bytes from Redis: {e}")
@@ -74,7 +69,7 @@ class CacheCleanupService:
         """Get the oldest cache items by download time."""
         try:
             # Get all items and sort by download time
-            all_items = self.redis.hgetall(CACHE_ITEMS_KEY)
+            all_items = self.redis.hgetall(REDIS_CACHE_ITEMS_KEY)
             items_with_time = []
             
             for cache_key, item_json in all_items.items():
@@ -96,7 +91,7 @@ class CacheCleanupService:
     def acquire_cleanup_lock(self, timeout: int = 300) -> bool:
         """Acquire a distributed lock for cleanup operations."""
         try:
-            return self.redis.set(CLEANUP_LOCK_KEY, f"cleanup_service_{os.getpid()}", nx=True, ex=timeout)
+            return self.redis.set(REDIS_CLEANUP_LOCK_KEY, f"cleanup_service_{os.getpid()}", nx=True, ex=timeout)
         except Exception as e:
             logger.error(f"Error acquiring cleanup lock: {e}")
             return False
@@ -104,7 +99,7 @@ class CacheCleanupService:
     def release_cleanup_lock(self) -> None:
         """Release the distributed cleanup lock."""
         try:
-            self.redis.delete(CLEANUP_LOCK_KEY)
+            self.redis.delete(REDIS_CLEANUP_LOCK_KEY)
         except Exception as e:
             logger.error(f"Error releasing cleanup lock: {e}")
     
@@ -112,7 +107,7 @@ class CacheCleanupService:
         """Remove a cache item from Redis and return its size."""
         try:
             # Get item data before removing
-            item_json = self.redis.hget(CACHE_ITEMS_KEY, cache_key)
+            item_json = self.redis.hget(REDIS_CACHE_ITEMS_KEY, cache_key)
             if not item_json:
                 return 0
                 
@@ -121,8 +116,8 @@ class CacheCleanupService:
             
             # Remove item and update total bytes atomically
             with self.redis.pipeline() as pipe:
-                pipe.hdel(CACHE_ITEMS_KEY, cache_key)
-                pipe.decrby(TOTAL_BYTES_KEY, size_bytes)
+                pipe.hdel(REDIS_CACHE_ITEMS_KEY, cache_key)
+                pipe.decrby(REDIS_TOTAL_BYTES_KEY, size_bytes)
                 pipe.execute()
             
             logger.debug(f"Removed cache item from Redis: {cache_key}")
@@ -138,7 +133,7 @@ class CacheCleanupService:
         cleanup_threshold_size = int(MAX_CACHE_SIZE * CLEANUP_THRESHOLD)
         
         if current_size <= cleanup_threshold_size:
-            logger.debug(f"Cache size ({current_size / 1024 / 1024:.2f}MB) below cleanup threshold ({cleanup_threshold_size / 1024 / 1024:.2f}MB)")
+            logger.debug(f"Cache size ({format_bytes_mb(current_size)}MB) below cleanup threshold ({format_bytes_mb(cleanup_threshold_size)}MB)")
             return
         
         # Try to acquire cleanup lock
@@ -157,8 +152,8 @@ class CacheCleanupService:
             target_size = int(MAX_CACHE_SIZE * CLEANUP_TARGET)
             bytes_to_free = current_size - target_size
             
-            logger.info(f"Starting cache cleanup: current {current_size / 1024 / 1024:.2f}MB, target {target_size / 1024 / 1024:.2f}MB")
-            logger.info(f"Need to free {bytes_to_free / 1024 / 1024:.2f}MB")
+            logger.info(f"Starting cache cleanup: current {format_bytes_mb(current_size)}MB, target {format_bytes_mb(target_size)}MB")
+            logger.info(f"Need to free {format_bytes_mb(bytes_to_free)}MB")
             
             # Get oldest items
             oldest_items = self.get_oldest_items(1000)  # Get up to 1000 oldest items
@@ -193,8 +188,8 @@ class CacheCleanupService:
                     self.remove_cache_item(item_data.get('cache_key', ''))
             
             final_size = self.get_total_bytes()
-            logger.info(f"Cache cleanup complete: removed {removed_count} files, freed {freed_bytes / 1024 / 1024:.2f}MB")
-            logger.info(f"New cache size: {final_size / 1024 / 1024:.2f}MB ({final_size / MAX_CACHE_SIZE * 100:.1f}% of limit)")
+            logger.info(f"Cache cleanup complete: removed {removed_count} files, freed {format_bytes_mb(freed_bytes)}MB")
+            logger.info(f"New cache size: {format_bytes_mb(final_size)}MB ({final_size / MAX_CACHE_SIZE * 100:.1f}% of limit)")
             
         finally:
             self.release_cleanup_lock()
@@ -202,7 +197,7 @@ class CacheCleanupService:
     def run(self) -> None:
         """Main service loop."""
         logger.info(f"Cache cleanup service started (PID: {os.getpid()})")
-        logger.info(f"Cache limit: {MAX_CACHE_SIZE / 1024 / 1024:.2f}MB")
+        logger.info(f"Cache limit: {format_bytes_mb(MAX_CACHE_SIZE)}MB")
         logger.info(f"Cleanup threshold: {CLEANUP_THRESHOLD * 100:.0f}%")
         logger.info(f"Cleanup target: {CLEANUP_TARGET * 100:.0f}%")
         logger.info(f"Check interval: {CLEANUP_INTERVAL} seconds")

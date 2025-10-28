@@ -16,6 +16,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code and configuration
+COPY cache.py .
 COPY app.py .
 COPY uwsgi.ini .
 

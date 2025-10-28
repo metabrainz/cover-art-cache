@@ -12,6 +12,7 @@ COPY requirements_cleaner.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy cleaner service
+COPY cache.py .
 COPY cleaner_service.py .
 
 # Health check
