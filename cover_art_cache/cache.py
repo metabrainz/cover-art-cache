@@ -163,3 +163,192 @@ class DistributedCacheIndex:
         except Exception as e:
             logger.error(f"Error getting items by type from Redis: {e}")
             return []
+
+    def scan_cache_directory(self, progress_callback=None) -> tuple[int, int]:
+        """
+        Scan the cache directory and build a new cache index.
+        
+        Args:
+            progress_callback: Optional callback function called with (files_scanned, total_mb) for progress reporting
+        
+        Returns:
+            tuple of (files_scanned, total_bytes)
+        """
+        import time
+        
+        logger.info("Scanning cache directory to build index...")
+        start_time = time.time()
+        files_scanned = 0
+        total_bytes = 0
+        
+        # Temporary keys for building new index
+        temp_cache_items_key = f"{self.cache_items_key}:temp"
+        temp_total_bytes_key = f"{self.total_bytes_key}:temp"
+        
+        try:
+            # Clear any existing temporary keys
+            self.redis.delete(temp_cache_items_key, temp_total_bytes_key)
+            logger.info("Cleared existing temporary Redis keys")
+            
+            # Initialize temporary cache index
+            temp_cache_index = DistributedCacheIndex(self.redis)
+            temp_cache_index.cache_items_key = temp_cache_items_key
+            temp_cache_index.total_bytes_key = temp_total_bytes_key
+            
+            # Scan both release and release-group directories
+            for cache_type in [CACHE_TYPE_RELEASE, CACHE_TYPE_RELEASE_GROUP]:
+                cache_type_dir = CACHE_DIR / cache_type
+                if not cache_type_dir.exists():
+                    continue
+                    
+                # Recursively find all files in the cache type directory
+                for file_path in cache_type_dir.rglob('*'):
+                    if not file_path.is_file():
+                        continue
+                        
+                    try:
+                        # Extract cache key from filename (remove extension)
+                        cache_key = file_path.stem
+                        
+                        # Extract MBID from cache key (first part before underscore)
+                        mbid = cache_key.split('_')[0]
+                        
+                        # Validate MBID format
+                        if not validate_mbid(mbid):
+                            logger.warning(f"Invalid MBID format in cache file: {file_path}")
+                            continue
+                        
+                        # Get file stats
+                        stat = file_path.stat()
+                        
+                        # Create cache item
+                        cache_item = CacheItem(
+                            cache_type=cache_type,
+                            mbid=mbid,
+                            cache_key=cache_key,
+                            file_path=file_path,
+                            downloaded_at=stat.st_mtime,  # Use modification time as download time
+                            size_bytes=stat.st_size
+                        )
+                        
+                        # Add to temporary index
+                        temp_cache_index.add_item(cache_item)
+                        files_scanned += 1
+                        total_bytes += stat.st_size
+                        
+                        # Call progress callback every 1000 files
+                        if progress_callback and files_scanned % 1000 == 0:
+                            progress_callback(files_scanned, total_bytes / 1024 / 1024)
+                        
+                    except Exception as e:
+                        logger.warning(f"Error processing cache file {file_path}: {e}")
+                        continue
+            
+            scan_time = time.time() - start_time
+            total_mb = total_bytes / 1024 / 1024
+            logger.info(f"Cache scan complete: {files_scanned} files, {total_mb:.2f}MB total, took {scan_time:.2f}s")
+            
+            return files_scanned, total_bytes
+            
+        except Exception as e:
+            logger.error(f"Error during cache scan: {e}")
+            # Clean up temporary keys on error
+            self.redis.delete(temp_cache_items_key, temp_total_bytes_key)
+            raise
+
+    def atomic_index_swap(self) -> bool:
+        """
+        Atomically swap the temporary cache index with the live index.
+        
+        Returns:
+            bool: True if swap was successful, False otherwise
+        """
+        temp_cache_items_key = f"{self.cache_items_key}:temp"
+        temp_total_bytes_key = f"{self.total_bytes_key}:temp"
+        
+        try:
+            # Use Redis pipeline for atomic operations
+            pipe = self.redis.pipeline()
+            
+            # Check if temporary keys exist
+            if not self.redis.exists(temp_cache_items_key):
+                logger.error("Temporary cache index not found - run scan first")
+                return False
+            
+            # Rename temporary keys to live keys (atomic swap)
+            pipe.rename(temp_cache_items_key, self.cache_items_key)
+            pipe.rename(temp_total_bytes_key, self.total_bytes_key)
+            
+            # Execute pipeline atomically
+            pipe.execute()
+            
+            logger.info("Successfully swapped cache index atomically")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error during atomic index swap: {e}")
+            return False
+
+    def exists(self) -> bool:
+        """
+        Check if cache index data exists in Redis.
+        
+        Returns:
+            bool: True if cache index exists and has data, False otherwise
+        """
+        try:
+            # Check if both keys exist and have data
+            items_exist = self.redis.exists(self.cache_items_key)
+            bytes_exist = self.redis.exists(self.total_bytes_key)
+            
+            if not items_exist or not bytes_exist:
+                return False
+            
+            # Check if items hash has any data
+            items_count = self.redis.hlen(self.cache_items_key)
+            
+            return items_count > 0
+            
+        except Exception as e:
+            logger.error(f"Error checking cache index existence: {e}")
+            return False
+
+
+def startup_cache_scan(redis_client) -> bool:
+    """
+    Perform cache scan at startup if needed.
+    
+    Args:
+        redis_client: Redis client instance
+    
+    Returns:
+        bool: True if scan was successful or not needed, False if scan failed
+    """
+    try:
+        # Initialize cache index
+        cache_index = DistributedCacheIndex(redis_client)
+        
+        # Check if cache index already exists
+        if cache_index.exists():
+            logger.info("Cache index already exists in Redis - skipping scan")
+            return True
+        
+        logger.info("Cache index not found in Redis - performing startup scan...")
+        
+        # Perform the scan
+        files_scanned, total_bytes = cache_index.scan_cache_directory()
+        
+        # Perform atomic swap
+        success = cache_index.atomic_index_swap()
+        
+        if success:
+            total_mb = total_bytes / 1024 / 1024
+            logger.info(f"Startup cache scan completed: {files_scanned} files, {total_mb:.2f}MB")
+            return True
+        else:
+            logger.error("Failed to swap cache index during startup scan")
+            return False
+            
+    except Exception as e:
+        logger.error(f"Error during startup cache scan: {e}")
+        return False

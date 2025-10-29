@@ -18,11 +18,15 @@ from flask import Flask, Response, request, jsonify
 import redis
 import requests
 
+#TODO: Check to see about bitmmap's concern: what happens if two processes try to download/cache the same file concurrently. 
+
+
 from .cache import (
     CACHE_DIR, MAX_CACHE_SIZE, COVERART_BASE_URL, MBID_PATTERN,
     REDIS_CACHE_ITEMS_KEY, REDIS_TOTAL_BYTES_KEY,
     CACHE_TYPE_RELEASE, CACHE_TYPE_RELEASE_GROUP,
-    validate_mbid, get_cache_subdir, format_bytes_mb, get_cache_usage_percent, DistributedCacheIndex, CacheItem
+    validate_mbid, get_cache_subdir, format_bytes_mb, get_cache_usage_percent, DistributedCacheIndex, CacheItem,
+    startup_cache_scan
 )
 
 logging.basicConfig(
@@ -97,68 +101,7 @@ def get_cache_path(cache_type: str, cache_key: str, extension: str = '') -> Path
         logger.error(f"Error creating cache path for {cache_type}/{cache_key}: {e}")
         raise
 
-def scan_cache_at_startup() -> None:
-    """Scan the cache directory at startup to populate the cache index."""
-    logger.info("Scanning cache directory to build index...")
-    start_time = time.time()
-    files_scanned = 0
-    
-    try:
-        # Clear existing Redis index
-        cache_index.redis.delete(cache_index.cache_items_key, cache_index.total_bytes_key)
-        logger.info("Cleared existing Redis cache index")
-        
-        # Scan both release and release-group directories
-        for cache_type in [CACHE_TYPE_RELEASE, CACHE_TYPE_RELEASE_GROUP]:
-            cache_type_dir = CACHE_DIR / cache_type
-            if not cache_type_dir.exists():
-                continue
-                
-            # Recursively find all files in the cache type directory
-            for file_path in cache_type_dir.rglob('*'):
-                if not file_path.is_file():
-                    continue
-                    
-                try:
-                    # Extract cache key from filename (remove extension)
-                    cache_key = file_path.stem
-                    
-                    # Extract MBID from cache key (first part before underscore)
-                    mbid = cache_key.split('_')[0]
-                    
-                    # Validate MBID format
-                    if not validate_mbid(mbid):
-                        logger.warning(f"Invalid MBID format in cache file: {file_path}")
-                        continue
-                    
-                    # Get file stats
-                    stat = file_path.stat()
-                    
-                    # Create cache item
-                    cache_item = CacheItem(
-                        cache_type=cache_type,
-                        mbid=mbid,
-                        cache_key=cache_key,
-                        file_path=file_path,
-                        downloaded_at=stat.st_mtime,  # Use modification time as download time
-                        size_bytes=stat.st_size
-                    )
-                    
-                    # Add to index
-                    cache_index.add_item(cache_item)
-                    files_scanned += 1
-                    
-                except Exception as e:
-                    logger.warning(f"Error processing cache file {file_path}: {e}")
-                    continue
-        
-        scan_time = time.time() - start_time
-        total_mb = cache_index.get_total_bytes() / 1024 / 1024
-        logger.info(f"Cache scan complete: {files_scanned} files, {total_mb:.2f}MB total, took {scan_time:.2f}s")
-        logger.info("Cache index populated in Redis for distributed access")
-        
-    except Exception as e:
-        logger.error(f"Error during cache scan: {e}")
+
 
 def get_cache_size() -> int:
     """Get the current cache size in bytes from the index."""
@@ -484,7 +427,15 @@ def handle_coverart_request_rg(mbid: str, path: str = "", size: str = ""):
 
 # Initialize cache index at startup
 logger.info("Cover Art Cache Service starting up...")
-scan_cache_at_startup()
+
+# Check if cache index exists, scan if needed
+logger.info("Checking cache index in Redis...")
+scan_success = startup_cache_scan(redis_client)
+if not scan_success:
+    logger.error("Failed to initialize cache index - service cannot start")
+    sys.exit(1)
+
+logger.info("Cache index ready - service starting...")
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000, debug=True)

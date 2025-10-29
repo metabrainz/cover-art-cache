@@ -17,7 +17,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code and configuration
 COPY cover_art_cache/ ./cover_art_cache/
-COPY uwsgi.ini .
+COPY uwsgi.ini scan_cache.py test_cover_art_cache.py .
 
 # Create cache directory structure and log directory with proper permissions
 RUN mkdir -p /var/cache/nginx/images/release /var/cache/nginx/images/release-group /var/log && \
