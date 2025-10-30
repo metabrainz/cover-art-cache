@@ -54,7 +54,6 @@ def handle_exception(e):
     logger.error(f"Unhandled exception: {e}", exc_info=True)
     return jsonify({"error": "Internal server error"}), 500
 
-
 # Check cache directory exists and is writable
 logger.info("Checking cache directory...")
 if not check_cache_directory_writable():
@@ -245,7 +244,7 @@ def handle_coverart_request(mbid: str, path: str = "", size: str = ""):
             #logger.info(f"Cache hit for {coverart_url}")
             # Use X-Accel-Redirect for efficient nginx file serving
             headers = {
-                "X-Accel-Redirect": cache_path.relative_to(CACHE_DIR),
+                "X-Accel-Redirect": "/cache/" + cache_path.relative_to(CACHE_DIR),
                 "Content-Type": get_content_type(cache_path),
                 "Cache-Control": "public, max-age=31536000",  # 1 year
                 "X-Cache-Status": "HIT"
@@ -271,8 +270,10 @@ def handle_coverart_request(mbid: str, path: str = "", size: str = ""):
         
         if success:
             # Use X-Accel-Redirect for efficient nginx file serving
+            temp = "/cache/" + cache_path.relative_to(CACHE_DIR)
+            print(temp)
             headers = {
-                "X-Accel-Redirect": cache_path.relative_to(CACHE_DIR),
+                "X-Accel-Redirect": "/cache/" + cache_path.relative_to(CACHE_DIR),
                 "Content-Type": get_content_type(cache_path),
                 "Cache-Control": "public, max-age=31536000",  # 1 year
                 "X-Cache-Status": "MISS"
@@ -380,7 +381,7 @@ def handle_coverart_request_rg(mbid: str, path: str = "", size: str = ""):
             #logger.info(f"Cache hit for {coverart_url}")
             # Use X-Accel-Redirect for efficient nginx file serving
             headers = {
-                "X-Accel-Redirect": cache_path.relative_to(CACHE_DIR),
+                "X-Accel-Redirect": "/cache/" + cache_path.relative_to(CACHE_DIR),
                 "Content-Type": get_content_type(cache_path),
                 "Cache-Control": "public, max-age=31536000",  # 1 year
                 "X-Cache-Status": "HIT"
@@ -407,7 +408,7 @@ def handle_coverart_request_rg(mbid: str, path: str = "", size: str = ""):
         if success:
             # Use X-Accel-Redirect for efficient nginx file serving
             headers = {
-                "X-Accel-Redirect": cache_path.relative_to(CACHE_DIR),
+                "X-Accel-Redirect": "/cache/" + cache_path.relative_to(CACHE_DIR),
                 "Content-Type": get_content_type(cache_path),
                 "Cache-Control": "public, max-age=31536000",  # 1 year
                 "X-Cache-Status": "MISS"
