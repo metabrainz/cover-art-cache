@@ -14,7 +14,7 @@ from typing import Dict, List, Tuple
 import re
 
 # Test configuration
-BASE_URL = "http://localhost:8080"
+BASE_URL = "http://localhost:8000"
 TEST_DATA_FILE = "test_data.json"
 MBID_PATTERN = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
 

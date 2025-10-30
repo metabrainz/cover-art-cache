@@ -54,6 +54,15 @@ def handle_exception(e):
     logger.error(f"Unhandled exception: {e}", exc_info=True)
     return jsonify({"error": "Internal server error"}), 500
 
+@app.before_request
+def log_request_info():
+    logger.info(f"Request: {request.method} {request.url} from {request.remote_addr}")
+
+@app.errorhandler(404)
+def handle_404(e):
+    logger.error(f"404 Not Found: {request.method} {request.url} from {request.remote_addr}")
+    return jsonify({"error": "Not found", "url": request.url, "method": request.method}), 404
+
 
 # Check cache directory exists and is writable
 logger.info("Checking cache directory...")
@@ -188,6 +197,18 @@ def health_check():
     """Health check endpoint."""
     logger.debug("Health check endpoint called")
     return jsonify({"status": "healthy", "cache_dir": str(CACHE_DIR)})
+
+@app.route("/debug/routes")
+def debug_routes():
+    """Debug endpoint to show all available routes."""
+    routes = []
+    for rule in app.url_map.iter_rules():
+        routes.append({
+            "endpoint": rule.endpoint,
+            "methods": list(rule.methods),
+            "rule": rule.rule
+        })
+    return jsonify({"routes": routes})
 
 @app.route("/cache-status")
 def cache_status():
