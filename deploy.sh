@@ -4,9 +4,17 @@
 
 set -e
 
+# Load environment variables from .env file
+if [ -f .env ]; then
+    export $(grep -v '^#' .env | xargs)
+else
+    echo "Warning: .env file not found. Using default values."
+fi
+
 # Configuration
-SERVICE_NAME="coverart-cache"
+SERVICE_NAME="app"  # Service name in docker-compose.yml
 COMPOSE_FILE="docker-compose.yml"
+SERVICE_PORT="${SERVICE_PORT:-8000}"  # Default to 8000 if not set
 
 # Colors for output
 RED='\033[0;31m'
@@ -67,10 +75,10 @@ deploy() {
     sleep 10
     
     # Health check
-    if curl -f -s http://localhost:8080/health > /dev/null; then
+    if curl -f -s http://localhost:${SERVICE_PORT}/health > /dev/null; then
         log_success "Service is running and healthy!"
-        log_info "Access your cache at: http://localhost:8080"
-        log_info "Check status at: http://localhost:8080/cache-status"
+        log_info "Access your cache at: http://localhost:${SERVICE_PORT}"
+        log_info "Check status at: http://localhost:${SERVICE_PORT}/cache-status"
     else
         log_error "Service health check failed"
         log_info "Check logs with: docker compose logs $SERVICE_NAME"
@@ -95,7 +103,7 @@ restart() {
     sleep 10
     
     # Health check
-    if curl -f -s http://localhost:8080/health > /dev/null; then
+    if curl -f -s http://localhost:${SERVICE_PORT}/health > /dev/null; then
         log_success "Service restarted successfully!"
     else
         log_error "Service health check failed after restart"
@@ -116,7 +124,11 @@ status() {
     echo ""
     
     echo "Cache Size:"
-    docker compose exec $SERVICE_NAME du -sh /var/cache/nginx/coverart 2>/dev/null || echo "Cache directory not accessible"
+    if [ -n "$COVER_ART_CACHE_DIR" ]; then
+        du -sh "$COVER_ART_CACHE_DIR" 2>/dev/null || echo "Cache directory not accessible"
+    else
+        docker compose exec $SERVICE_NAME du -sh /cache 2>/dev/null || echo "Cache directory not accessible"
+    fi
     echo ""
     
     echo "Recent Activity (last 10 lines):"
@@ -129,7 +141,7 @@ clean_cache() {
     read -r response
     if [[ "$response" =~ ^[Yy]$ ]]; then
         log_info "Cleaning cache..."
-        docker compose exec $SERVICE_NAME find /var/cache/nginx/coverart -type f -delete 2>/dev/null || true
+        docker compose exec $SERVICE_NAME find /cache -type f -delete 2>/dev/null || true
         log_success "Cache cleaned"
     else
         log_info "Cache cleaning cancelled"
