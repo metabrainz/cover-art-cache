@@ -26,7 +26,7 @@ from .cache import (
     REDIS_CACHE_ITEMS_KEY, REDIS_TOTAL_BYTES_KEY,
     CACHE_TYPE_RELEASE, CACHE_TYPE_RELEASE_GROUP,
     validate_mbid, get_cache_subdir, format_bytes_mb, get_cache_usage_percent, DistributedCacheIndex, CacheItem,
-    startup_cache_scan
+    startup_cache_scan, check_cache_directory_writable
 )
 
 logging.basicConfig(
@@ -55,8 +55,11 @@ def handle_exception(e):
     return jsonify({"error": "Internal server error"}), 500
 
 
-# Ensure cache directory exists
-CACHE_DIR.mkdir(parents=True, exist_ok=True)
+# Check cache directory exists and is writable
+logger.info("Checking cache directory...")
+if not check_cache_directory_writable():
+    logger.error(f"Cache directory {CACHE_DIR} is not writable - service cannot start")
+    sys.exit(1)
 
 # Redis connection for distributed cache index
 redis_client = redis.Redis(host='redis', port=6379, db=0, decode_responses=True)

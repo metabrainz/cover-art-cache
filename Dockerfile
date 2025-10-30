@@ -19,15 +19,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY cover_art_cache/ ./cover_art_cache/
 COPY uwsgi.ini scan_cache.py test_cover_art_cache.py .
 
-# Create cache directory structure and log directory with proper permissions
-RUN mkdir -p /var/cache/nginx/images/release /var/cache/nginx/images/release-group /var/log && \
-    chmod -R 777 /var/cache/nginx/images && \
-    chmod 777 /var/log
-
-# Expose the port
-EXPOSE 8000
-
-# Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 

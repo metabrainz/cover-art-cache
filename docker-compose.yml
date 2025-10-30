@@ -7,19 +7,20 @@ services:
     depends_on:
       - redis
     ports:
-      - "127.0.0.1:8080:8000"
+      - "127.0.0.1:8000:8000"
     restart: unless-stopped
+    user: "1000:1000"
+    environment:
+      - COVER_ART_CACHE_MAX_SIZE=${COVER_ART_CACHE_MAX_SIZE}
+      - VIRTUAL_HOST=${VIRTUAL_HOST}
+      - VIRTUAL_PORT=8000
+      - LETSENCRYPT_HOST=${LETSENCRYPT_HOST}
+      - LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-    user: "1000:1000"
-    environment:
-      - COVER_ART_CACHE_MAX_SIZE=${COVER_ART_CACHE_MAX_SIZE}
-      - VIRTUAL_HOST=deepstupid.com
-      - LETSENCRYPT_HOST=deepstupid.com
-      - LETSENCRYPT_EMAIL=mayhem@gmail.com
     networks:
       - ssl-proxy-network
       - cache-network
@@ -50,7 +51,7 @@ services:
       - COVER_ART_CACHE_MAX_SIZE=${COVER_ART_CACHE_MAX_SIZE}
       - COVER_ART_CACHE_CLEANUP_INTERVAL=${COVER_ART_CACHE_CLEANUP_INTERVAL}
     volumes:
-      - ${COVER_ART_CACHE_DIR}:/var/cache/nginx/images
+      - ${COVER_ART_CACHE_DIR}:/cache
     depends_on:
       - redis
     restart: unless-stopped
@@ -65,9 +66,5 @@ networks:
     name: cache-network
 
 volumes:
-  nginx_cache:
-    driver: local
-  nginx_logs:
-    driver: local
   redis_data:
     driver: local

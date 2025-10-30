@@ -13,8 +13,9 @@ import re
 from pathlib import Path
 from typing import Dict, List, Optional
 
-# Cache configuration
-CACHE_DIR = Path("/cache")
+# Configuration
+import os
+CACHE_DIR = Path(os.environ.get("CACHE_DIR", "/cache"))
 MAX_CACHE_SIZE = int(os.environ.get('COVER_ART_CACHE_MAX_SIZE', '100')) * 1024 * 1024  # Convert MB to bytes
 CLEANUP_INTERVAL = int(os.environ.get('COVER_ART_CACHE_CLEANUP_INTERVAL', '300'))  # Default 5 minutes
 
@@ -69,6 +70,56 @@ def get_cache_usage_percent(current_bytes: int) -> float:
     if MAX_CACHE_SIZE <= 0:
         return 0.0
     return round((current_bytes / MAX_CACHE_SIZE) * 100, 1)
+
+
+def check_cache_directory_writable() -> bool:
+    """
+    Check if the cache directory exists and is writable.
+    
+    Returns:
+        bool: True if cache directory is writable, False otherwise
+    """
+    try:
+        # Check if cache directory exists, create if not
+        if not CACHE_DIR.exists():
+            logger.info(f"Cache directory {CACHE_DIR} does not exist, creating...")
+            CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        
+        # Test writability by creating a temporary test file
+        test_file = CACHE_DIR / ".write_test"
+        
+        try:
+            # Try to write to the directory
+            with open(test_file, 'w') as f:
+                f.write("test")
+            
+            # Try to read back the file
+            with open(test_file, 'r') as f:
+                content = f.read()
+            
+            # Clean up test file
+            test_file.unlink()
+            
+            if content == "test":
+                logger.info(f"Cache directory {CACHE_DIR} is writable")
+                return True
+            else:
+                logger.error(f"Cache directory {CACHE_DIR} write test failed - content mismatch")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Cache directory {CACHE_DIR} is not writable: {e}")
+            # Clean up test file if it exists
+            if test_file.exists():
+                try:
+                    test_file.unlink()
+                except:
+                    pass
+            return False
+            
+    except Exception as e:
+        logger.error(f"Error checking cache directory {CACHE_DIR}: {e}")
+        return False
 
 
 class DistributedCacheIndex:
