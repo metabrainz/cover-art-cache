@@ -243,8 +243,9 @@ def handle_coverart_request(mbid: str, path: str = "", size: str = ""):
         if cache_path.exists():
             #logger.info(f"Cache hit for {coverart_url}")
             # Use X-Accel-Redirect for efficient nginx file serving
+            print(cache_path)
             headers = {
-                "X-Accel-Redirect": "/cache/" + cache_path.relative_to(CACHE_DIR),
+                "X-Accel-Redirect": cache_path,
                 "Content-Type": get_content_type(cache_path),
                 "Cache-Control": "public, max-age=31536000",  # 1 year
                 "X-Cache-Status": "HIT"
@@ -270,10 +271,8 @@ def handle_coverart_request(mbid: str, path: str = "", size: str = ""):
         
         if success:
             # Use X-Accel-Redirect for efficient nginx file serving
-            temp = "/cache/" + cache_path.relative_to(CACHE_DIR)
-            print(temp)
             headers = {
-                "X-Accel-Redirect": "/cache/" + cache_path.relative_to(CACHE_DIR),
+                "X-Accel-Redirect": cache_path,
                 "Content-Type": get_content_type(cache_path),
                 "Cache-Control": "public, max-age=31536000",  # 1 year
                 "X-Cache-Status": "MISS"
@@ -381,7 +380,7 @@ def handle_coverart_request_rg(mbid: str, path: str = "", size: str = ""):
             #logger.info(f"Cache hit for {coverart_url}")
             # Use X-Accel-Redirect for efficient nginx file serving
             headers = {
-                "X-Accel-Redirect": "/cache/" + cache_path.relative_to(CACHE_DIR),
+                "X-Accel-Redirect": cache_path,
                 "Content-Type": get_content_type(cache_path),
                 "Cache-Control": "public, max-age=31536000",  # 1 year
                 "X-Cache-Status": "HIT"
@@ -408,7 +407,7 @@ def handle_coverart_request_rg(mbid: str, path: str = "", size: str = ""):
         if success:
             # Use X-Accel-Redirect for efficient nginx file serving
             headers = {
-                "X-Accel-Redirect": "/cache/" + cache_path.relative_to(CACHE_DIR),
+                "X-Accel-Redirect": cache_path,
                 "Content-Type": get_content_type(cache_path),
                 "Cache-Control": "public, max-age=31536000",  # 1 year
                 "X-Cache-Status": "MISS"

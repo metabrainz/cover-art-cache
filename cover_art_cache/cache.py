@@ -15,7 +15,7 @@ from typing import Dict, List, Optional
 
 # Configuration
 import os
-CACHE_DIR = Path(os.environ.get("CACHE_DIR", "/cache"))
+CACHE_DIR = Path(os.environ.get("COVER_ART_CACHE_DIR", "/cover-art-cache"))
 MAX_CACHE_SIZE = int(os.environ.get('COVER_ART_CACHE_MAX_SIZE', '100')) * 1024 * 1024  # Convert MB to bytes
 CLEANUP_INTERVAL = int(os.environ.get('COVER_ART_CACHE_CLEANUP_INTERVAL', '300'))  # Default 5 minutes
 

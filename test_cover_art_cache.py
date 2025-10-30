@@ -208,7 +208,7 @@ class TestCoverArtCache:
         data = response.json()
         
         # Verify cache directory path
-        assert data["cache_dir"] == "/cache"
+        assert data["cache_dir"] == "/cover-art-cache"
         
         # Verify we have both release and release-group files if any cached
         if data["cached_files"] > 0:

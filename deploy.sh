@@ -127,7 +127,7 @@ status() {
     if [ -n "$COVER_ART_CACHE_DIR" ]; then
         du -sh "$COVER_ART_CACHE_DIR" 2>/dev/null || echo "Cache directory not accessible"
     else
-        docker compose exec $SERVICE_NAME du -sh /cache 2>/dev/null || echo "Cache directory not accessible"
+        docker compose exec $SERVICE_NAME du -sh /cover-art-cache 2>/dev/null || echo "Cache directory not accessible"
     fi
     echo ""
     
@@ -141,7 +141,7 @@ clean_cache() {
     read -r response
     if [[ "$response" =~ ^[Yy]$ ]]; then
         log_info "Cleaning cache..."
-        docker compose exec $SERVICE_NAME find /cache -type f -delete 2>/dev/null || true
+        docker compose exec $SERVICE_NAME find /cover-art-cache -type f -delete 2>/dev/null || true
         log_success "Cache cleaned"
     else
         log_info "Cache cleaning cancelled"
