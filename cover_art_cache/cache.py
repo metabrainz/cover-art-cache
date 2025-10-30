@@ -241,6 +241,9 @@ class DistributedCacheIndex:
             self.redis.delete(temp_cache_items_key, temp_total_bytes_key)
             logger.info("Cleared existing temporary Redis keys")
             
+            # Initialize temporary total bytes to 0
+            self.redis.set(temp_total_bytes_key, 0)
+            
             # Initialize temporary cache index
             temp_cache_index = DistributedCacheIndex(self.redis)
             temp_cache_index.cache_items_key = temp_cache_items_key
@@ -299,6 +302,9 @@ class DistributedCacheIndex:
             total_mb = total_bytes / 1024 / 1024
             logger.info(f"Cache scan complete: {files_scanned} files, {total_mb:.2f}MB total, took {scan_time:.2f}s")
             
+            # Ensure temporary total bytes reflects the final scan result
+            self.redis.set(temp_total_bytes_key, total_bytes)
+            
             return files_scanned, total_bytes
             
         except Exception as e:
@@ -321,14 +327,34 @@ class DistributedCacheIndex:
             # Use Redis pipeline for atomic operations
             pipe = self.redis.pipeline()
             
-            # Check if temporary keys exist
-            if not self.redis.exists(temp_cache_items_key):
+            # Check if temporary total bytes key exists (this is always created during scan)
+            if not self.redis.exists(temp_total_bytes_key):
                 logger.error("Temporary cache index not found - run scan first")
                 return False
             
-            # Rename temporary keys to live keys (atomic swap)
-            pipe.rename(temp_cache_items_key, self.cache_items_key)
-            pipe.rename(temp_total_bytes_key, self.total_bytes_key)
+            # For empty cache, we need to handle the case where temp keys exist but are empty
+            temp_total_bytes = self.redis.get(temp_total_bytes_key) or "0"
+            temp_item_count = self.redis.hlen(temp_cache_items_key) if self.redis.exists(temp_cache_items_key) else 0
+            
+            logger.info(f"Swapping cache index: {temp_item_count} items, {temp_total_bytes} bytes")
+            
+            # Delete existing live keys first to avoid rename conflicts
+            pipe.delete(self.cache_items_key)
+            pipe.delete(self.total_bytes_key)
+            
+            # Set the total bytes (works for both empty and non-empty caches)
+            pipe.set(self.total_bytes_key, temp_total_bytes)
+            
+            # Only rename the items hash if it exists and has data
+            if temp_item_count > 0:
+                pipe.rename(temp_cache_items_key, self.cache_items_key)
+            else:
+                # For empty cache, just ensure the key exists but is empty
+                pipe.delete(self.cache_items_key)  # Ensure it's truly empty
+            
+            # Clean up temporary keys
+            pipe.delete(temp_cache_items_key)
+            pipe.delete(temp_total_bytes_key)
             
             # Execute pipeline atomically
             pipe.execute()
@@ -338,6 +364,11 @@ class DistributedCacheIndex:
             
         except Exception as e:
             logger.error(f"Error during atomic index swap: {e}")
+            # Clean up temporary keys on error
+            try:
+                self.redis.delete(temp_cache_items_key, temp_total_bytes_key)
+            except:
+                pass
             return False
 
     def exists(self) -> bool:
