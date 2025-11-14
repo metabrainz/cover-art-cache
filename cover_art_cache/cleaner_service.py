@@ -138,20 +138,46 @@ class CacheCleanupService:
         
         freed_bytes = 0
         removed_count = 0
+        directories_to_check = set()  # Track directories that may be empty after deletion
         
         while min_heap and freed_bytes < bytes_to_free:
             neg_mtime, file_path, file_size = heapq.heappop(min_heap)
             
             try:
+                # Remember parent directory to check if it's empty later
+                parent_dir = file_path.parent
+                
                 file_path.unlink()
                 freed_bytes += file_size
                 removed_count += 1
+                
+                # Add parent directory and its ancestors to check list
+                # We traverse up to CACHE_DIR but not including it
+                current = parent_dir
+                while current != CACHE_DIR and current.is_relative_to(CACHE_DIR):
+                    directories_to_check.add(current)
+                    current = current.parent
                 
                 if removed_count % 1000 == 0:
                     logger.info(f"Removed {removed_count} files, freed {freed_bytes / 1024 / 1024:.0f}MB so far...")
                     
             except Exception as e:
                 logger.warning(f"Failed to remove {file_path}: {e}")
+        
+        # Clean up empty directories (deepest first to allow parent cleanup)
+        cleaned_dirs = 0
+        for directory in sorted(directories_to_check, key=lambda p: len(p.parts), reverse=True):
+            try:
+                if directory.exists() and directory.is_dir():
+                    # Only remove if directory is empty
+                    if not any(directory.iterdir()):
+                        directory.rmdir()
+                        cleaned_dirs += 1
+            except Exception as e:
+                logger.debug(f"Could not remove directory {directory}: {e}")
+        
+        if cleaned_dirs > 0:
+            logger.info(f"Cleaned up {cleaned_dirs} empty directories")
         
         # Get final cache size
         final_cache_size = self.get_cache_size()

@@ -193,7 +193,7 @@ def resolve_redirect(coverart_url: str) -> str:
                 
         except requests.exceptions.RequestException as e:
             if attempt < max_retries:
-                logger.warning(f"Connection error on attempt {attempt}/{max_retries} for {coverart_url}: {e}. Retrying in {retry_delay}s...")
+                #logger.warning(f"Connection error on attempt {attempt}/{max_retries} for {coverart_url}: {e}. Retrying in {retry_delay}s...")
                 time.sleep(retry_delay)
             else:
                 logger.error(f"Failed to resolve redirect after {max_retries} attempts for {coverart_url}: {e}")
