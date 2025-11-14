@@ -1,0 +1,4 @@
+location /cover-art-cache/ {
+    internal;
+    alias /cover-art-cache/;
+}
