@@ -9,6 +9,7 @@ working with nginx for efficient file serving.
 import logging
 from pathlib import Path
 import sys
+import time
 from urllib.parse import urlparse
 
 from flask import Flask, Response, request, jsonify
@@ -170,25 +171,33 @@ def download_item(url: str, cache_path: Path) -> bool:
 
 def resolve_redirect(coverart_url: str) -> str:
     """Resolve the redirect from coverartarchive.org to get the actual image URL."""
-    try:
-        response = requests.head(coverart_url, timeout=30, allow_redirects=False)
-        
-        if response.status_code in (301, 302, 307, 308):
-            location = response.headers.get('Location')
-            if location:
-                return location
-            else:
-                raise ValueError("No redirect location found")
-        elif response.status_code == 404:
-            raise FileNotFoundError("Cover art not found")
-        elif response.status_code == 400:
-            raise ValueError("Bad request")
-        else:
-            raise RuntimeError(f"Unexpected response from coverartarchive.org: {response.status_code}")
+    max_retries = 3
+    retry_delay = 2  # seconds
+    
+    for attempt in range(1, max_retries + 1):
+        try:
+            response = requests.head(coverart_url, timeout=30, allow_redirects=False)
             
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Error resolving redirect for {coverart_url}: {e}")
-        raise ConnectionError("Failed to connect to coverartarchive.org")
+            if response.status_code in (301, 302, 307, 308):
+                location = response.headers.get('Location')
+                if location:
+                    return location
+                else:
+                    raise ValueError("No redirect location found")
+            elif response.status_code == 404:
+                raise FileNotFoundError("Cover art not found")
+            elif response.status_code == 400:
+                raise ValueError("Bad request")
+            else:
+                raise RuntimeError(f"Unexpected response from coverartarchive.org: {response.status_code}")
+                
+        except requests.exceptions.RequestException as e:
+            if attempt < max_retries:
+                logger.warning(f"Connection error on attempt {attempt}/{max_retries} for {coverart_url}: {e}. Retrying in {retry_delay}s...")
+                time.sleep(retry_delay)
+            else:
+                logger.error(f"Failed to resolve redirect after {max_retries} attempts for {coverart_url}: {e}")
+                raise ConnectionError("Failed to connect to coverartarchive.org")
 
 def get_content_type(file_path: Path) -> str:
     """Get content type based on file extension."""

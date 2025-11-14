@@ -83,7 +83,7 @@ class CacheCleanupService:
         target_size_bytes = CLEAN_TO_MB * 1024 * 1024
         bytes_to_free = cache_size_bytes - target_size_bytes
         
-        logger.info(f"Need to free {bytes_to_free / 1024 / 1024:.0f}MB to reach {CLEAN_TO_MB}MB")
+        #logger.info(f"Need to free {bytes_to_free / 1024 / 1024:.0f}MB to reach {CLEAN_TO_MB}MB")
         
         # Scan files and collect only what we need to delete
         # We'll keep a max-heap of the oldest files until we have enough to meet our target
@@ -125,7 +125,7 @@ class CacheCleanupService:
                     logger.warning(f"Error getting stats for {file_path}: {e}")
                     continue
             
-            logger.info(f"Scanned {scanned_count} total files, selected {len(files_to_delete)} oldest files for deletion")
+            #logger.info(f"Scanned {scanned_count} total files, selected {len(files_to_delete)} oldest files for deletion")
             
         except Exception as e:
             logger.error(f"Error during file scanning: {e}")
@@ -139,7 +139,6 @@ class CacheCleanupService:
         freed_bytes = 0
         removed_count = 0
         
-        logger.info("Starting file deletion...")
         while min_heap and freed_bytes < bytes_to_free:
             neg_mtime, file_path, file_size = heapq.heappop(min_heap)
             
