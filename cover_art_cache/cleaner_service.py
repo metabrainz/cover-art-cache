@@ -25,7 +25,7 @@ logging.basicConfig(
 logger = logging.getLogger('cleanup_service')
 
 # Configuration
-CACHE_DIR = Path(os.environ.get("COVER_ART_CACHE_DIR", "/cover-art-cache"))
+CACHE_DIR = Path("/cover-art-cache")
 CLEANUP_INTERVAL = int(os.environ.get('COVER_ART_CACHE_CLEANUP_INTERVAL', '300'))  # Default 5 minutes
 MAX_SIZE_MB = int(os.environ.get('COVER_ART_CACHE_MAX_SIZE_MB', '10000'))  # Default 10GB
 CLEAN_TO_MB = int(os.environ.get('COVER_ART_CACHE_CLEAN_TO_MB', '8000'))  # Default 8GB

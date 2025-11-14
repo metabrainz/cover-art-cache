@@ -9,7 +9,6 @@ services:
     restart: unless-stopped
     user: "1000:1000"
     environment:
-      - COVER_ART_CACHE_MAX_SIZE=${COVER_ART_CACHE_MAX_SIZE}
       - VIRTUAL_HOST=${VIRTUAL_HOST}
       - VIRTUAL_PORT=8000
       - LETSENCRYPT_HOST=${LETSENCRYPT_HOST}
@@ -30,7 +29,8 @@ services:
     container_name: cover-art-cache-cleaner
     environment:
        - PYTHONUNBUFFERED=1
-       - COVER_ART_CACHE_MAX_SIZE=${COVER_ART_CACHE_MAX_SIZE}
+       - COVER_ART_CACHE_MAX_SIZE_MB=${COVER_ART_CACHE_MAX_SIZE_MB}
+       - COVER_ART_CACHE_CLEAN_TO_MB=${COVER_ART_CACHE_CLEAN_TO_MB}
        - COVER_ART_CACHE_CLEANUP_INTERVAL=${COVER_ART_CACHE_CLEANUP_INTERVAL}
     volumes:
        - ${COVER_ART_CACHE_DIR}:/cover-art-cache
