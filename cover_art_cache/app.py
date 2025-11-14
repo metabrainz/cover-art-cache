@@ -227,6 +227,7 @@ def handle_coverart_request(url_path: str):
     
     # Get cache path - try to find existing cached file with any extension
     base_cache_path = get_cache_path_for_url(url_path)
+    logger.info(base_cache_path)
     
     # Check if we already have this cached (try common extensions)
     for ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.pdf', '']:
@@ -239,6 +240,7 @@ def handle_coverart_request(url_path: str):
                 "Cache-Control": "public, max-age=31536000",  # 1 year
                 "X-Cache-Status": "HIT"
             }
+            logger.info(str(headers))
             return Response("", headers=headers)
     
     # Cache miss - need to download the image
@@ -264,6 +266,7 @@ def handle_coverart_request(url_path: str):
                 "Cache-Control": "public, max-age=31536000",  # 1 year
                 "X-Cache-Status": "MISS"
             }
+            logger.info(str(headers))
             return Response("", headers=headers)
         else:
             return jsonify({"error": "Failed to download image"}), 502
@@ -284,6 +287,7 @@ def index():
 @app.route("/release/<path:url_path>")
 def get_release(url_path):
     """Handle all release cover art requests."""
+    logger.info("handle release request")
     return handle_coverart_request(f"release/{url_path}")
 
 @app.route("/release-group/<path:url_path>")

@@ -12,6 +12,7 @@ services:
       - /root/vhost:/etc/nginx/vhost.d
       - html:/usr/share/nginx/html
       - nginx_cache:/cache
+      - ./proxy.conf:/etc/nginx/proxy.conf
       - ${COVER_ART_CACHE_DIR}:/cover-art-cache
     labels:
       - com.github.jrcs.letsencrypt_nginx_proxy_companion.nginx_proxy
