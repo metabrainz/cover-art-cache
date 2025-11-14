@@ -12,7 +12,6 @@ import sys
 from urllib.parse import urlparse
 
 from flask import Flask, Response, request, jsonify
-from werkzeug.exceptions import BadRequest
 import requests
 
 #TODO: Check to see about bitmmap's concern: what happens if two processes try to download/cache the same file concurrently. 
@@ -273,6 +272,9 @@ def handle_coverart_request(url_path: str):
             
     except FileNotFoundError:
         return jsonify({"error": "Cover art not found"}), 404
+    except ValueError as e:
+        # Handle bad request errors (400)
+        return jsonify({"error": str(e)}), 400
     except ConnectionError:
         return jsonify({"error": "Failed to connect to coverartarchive.org"}), 502
     except Exception as e:
@@ -287,13 +289,11 @@ def index():
 @app.route("/release/<path:url_path>")
 def get_release(url_path):
     """Handle all release cover art requests."""
-    logger.info("handle release request 'release/%s'" % url_path)
     return handle_coverart_request(f"release/{url_path}")
 
 @app.route("/release-group/<path:url_path>")
 def get_release_group(url_path):
     """Handle all release-group cover art requests."""
-    logger.info("handle release group request 'release-group/%s'" % url_path)
     return handle_coverart_request(f"release-group/{url_path}")
 
 logger.info("Cover Art Cache Service ready...")
