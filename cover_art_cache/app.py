@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 
 # Configuration
-CACHE_DIR = "/cover-art-cache"
+CACHE_DIR = Path("/cover-art-cache")
 COVERART_BASE_URL = "https://coverartarchive.org"
 
 
