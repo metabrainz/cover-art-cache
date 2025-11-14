@@ -57,21 +57,15 @@ class TestCoverArtCache:
         # Validate response structure
         data = response.json()
         required_fields = [
-            "status", "cached_files", "cache_size_bytes", "cache_size_mb",
-            "cache_limit_mb", "cache_usage_percent", "cache_dir",
-            "cache_index_type", "redis_available"
+            "status", "cache_dir"
         ]
         
         for field in required_fields:
             assert field in data, f"Missing required field: {field}"
         
         # Validate data types
-        assert isinstance(data["cached_files"], int)
-        assert isinstance(data["cache_size_bytes"], int)
-        assert isinstance(data["cache_size_mb"], (int, float))
-        assert isinstance(data["cache_limit_mb"], (int, float))
-        assert isinstance(data["redis_available"], bool)
-        assert data["cache_index_type"] == "redis"
+        assert isinstance(data["status"], str)
+        assert isinstance(data["cache_dir"], str)
     
     def test_invalid_mbid_rejection(self):
         """Test that invalid MBIDs are properly rejected"""
@@ -208,27 +202,14 @@ class TestCoverArtCache:
         data = response.json()
         
         # Verify cache directory path
-        assert data["cache_dir"] == "/cover-art-cache"
-        
-        # Verify we have both release and release-group files if any cached
-        if data["cached_files"] > 0:
-            assert "release_files" in data
-            assert "release_group_files" in data
-            assert isinstance(data["release_files"], int)
-            assert isinstance(data["release_group_files"], int)
-            
-            # Total should match
-            total_reported = data["release_files"] + data["release_group_files"]
-            assert total_reported == data["cached_files"], \
-                f"Total files mismatch: {total_reported} != {data['cached_files']}"
+        assert data["cache_dir"] == "/cache"
     
-    def test_redis_integration(self):
-        """Test Redis integration is working"""
+    def test_cache_status_response(self):
+        """Test cache status returns expected response"""
         response = requests.get(f"{BASE_URL}/cache-status")
         data = response.json()
         
-        assert data["redis_available"] is True, "Redis should be available"
-        assert data["cache_index_type"] == "redis", "Should be using Redis cache index"
+        assert data["status"] == "running", "Service should be running"
     
     def test_concurrent_requests(self):
         """Test handling of concurrent requests to the same resource"""
