@@ -178,7 +178,7 @@ def resolve_redirect(coverart_url: str) -> str:
         elif response.status_code == 404:
             raise FileNotFoundError("Cover art not found")
         elif response.status_code == 400:
-            raise BadRequest(response.text)
+            raise ValueError("Bad request")
         else:
             raise RuntimeError(f"Unexpected response from coverartarchive.org: {response.status_code}")
             
