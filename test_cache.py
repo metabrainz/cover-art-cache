@@ -10,33 +10,31 @@ import re
 import time
 import requests
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Configuration
 VIRTUAL_HOST = os.environ.get('VIRTUAL_HOST', 'localhost')
 BASE_URL = f"https://{VIRTUAL_HOST}"
 MBID_PATTERN = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
+MBID_FILE = "release_mbids.txt"
 
-# Load MBIDs from this file
 def load_mbids():
-    """Load and parse MBIDs from this file."""
+    """Load and parse MBIDs from release_mbids.txt file."""
     mbids = []
-    in_data_section = False
     
-    with open("release_mbids.txt", 'r') as f:
+    mbid_file = Path(MBID_FILE)
+    if not mbid_file.exists():
+        raise FileNotFoundError(f"MBID file not found: {MBID_FILE}")
+    
+    with open(mbid_file, 'r') as f:
         for line in f:
             line = line.strip()
             
-            # Check if we've reached the data section
-            if 'MBIDs below' in line or '===================================' in line:
-                in_data_section = True
-                continue
-            
-            # Skip until we reach data section
-            if not in_data_section:
-                continue
-                
-            # Skip empty lines
-            if not line:
+            # Skip empty lines and comments
+            if not line or line.startswith('#'):
                 continue
             
             # Remove quotes if present and strip whitespace

@@ -2,3 +2,4 @@ pytest>=7.4.0
 requests>=2.31.0
 pytest-xdist>=3.3.0  # For parallel test execution
 pytest-cov>=4.1.0    # For coverage reporting
+python-dotenv>=1.0.0  # For loading .env files
