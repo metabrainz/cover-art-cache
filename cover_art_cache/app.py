@@ -86,6 +86,10 @@ def check_cache_directory_writable() -> bool:
 logger.info("Cover Art Cache Service starting up...")
 
 # Add error handlers
+@app.errorhandler(404)
+def handle_not_found(e):
+    return jsonify({"error": "Not found"}), 404
+
 @app.errorhandler(500)
 def handle_internal_error(e):
     logger.error(f"Internal server error: {e}")
@@ -93,6 +97,9 @@ def handle_internal_error(e):
 
 @app.errorhandler(Exception)
 def handle_exception(e):
+    # Don't log 404 errors as exceptions
+    if hasattr(e, 'code') and e.code == 404:
+        return jsonify({"error": "Not found"}), 404
     logger.error(f"Unhandled exception: {e}", exc_info=True)
     return jsonify({"error": "Internal server error"}), 500
 
