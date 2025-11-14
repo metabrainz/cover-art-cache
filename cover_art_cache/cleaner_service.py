@@ -2,17 +2,17 @@
 """
 Cache Cleanup Service
 
-A dedicated service that periodically checks the cache size and removes
-oldest files when the cache exceeds 90% of the configured limit.
+A dedicated service that periodically checks disk space and removes
+oldest files when the volume usage exceeds the configured threshold.
 """
 
 import os
+import shutil
 import time
 import logging
-import redis
-import json
+import heapq
 from pathlib import Path
-from typing import List, Dict
+from typing import List, Tuple
 import signal
 import sys
 
@@ -24,28 +24,17 @@ logging.basicConfig(
 )
 logger = logging.getLogger('cleanup_service')
 
-# Import shared definitions
-from .cache import (
-    CACHE_DIR, MAX_CACHE_SIZE, CLEANUP_INTERVAL, CLEANUP_THRESHOLD, CLEANUP_TARGET,
-    REDIS_CACHE_ITEMS_KEY, REDIS_TOTAL_BYTES_KEY, REDIS_CLEANUP_LOCK_KEY,
-    format_bytes_mb
-)
-
-# Redis connection
-try:
-    redis_client = redis.Redis(host='redis', port=6379, db=0, decode_responses=True)
-    redis_client.ping()
-    logger.info("Connected to Redis cache index")
-except Exception as e:
-    logger.error(f"Failed to connect to Redis: {e}")
-    sys.exit(1)
+# Configuration
+CACHE_DIR = Path(os.environ.get("COVER_ART_CACHE_DIR", "/cover-art-cache"))
+CLEANUP_INTERVAL = int(os.environ.get('COVER_ART_CACHE_CLEANUP_INTERVAL', '300'))  # Default 5 minutes
+MAX_VOLUME_PERCENT = int(os.environ.get('COVER_ART_CACHE_MAX_VOLUME_PERCENT', '80'))
+CLEAN_TO_PERCENT = int(os.environ.get('COVER_ART_CACHE_CLEAN_TO_PERCENT', '75'))
 
 class CacheCleanupService:
-    """Service that manages cache cleanup operations."""
+    """Service that manages cache cleanup operations based on disk usage."""
     
     def __init__(self):
         self.running = True
-        self.redis = redis_client
         
         # Set up signal handlers for graceful shutdown
         signal.signal(signal.SIGTERM, self._signal_handler)
@@ -56,147 +45,120 @@ class CacheCleanupService:
         logger.info(f"Received signal {signum}, shutting down...")
         self.running = False
     
-    def get_total_bytes(self) -> int:
-        """Get total cache size from Redis."""
+    def get_volume_usage(self) -> Tuple[int, int, float]:
+        """Get disk usage statistics for the cache volume.
+        
+        Returns:
+            Tuple of (used_bytes, total_bytes, usage_percent)
+        """
         try:
-            total = self.redis.get(REDIS_TOTAL_BYTES_KEY)
-            return int(total) if total else 0
+            stat = shutil.disk_usage(CACHE_DIR)
+            usage_percent = (stat.used / stat.total) * 100
+            return stat.used, stat.total, usage_percent
         except Exception as e:
-            logger.error(f"Error getting total bytes from Redis: {e}")
-            return 0
-    
-    def get_oldest_items(self, count: int) -> List[Dict]:
-        """Get the oldest cache items by download time."""
-        try:
-            # Get all items and sort by download time
-            all_items = self.redis.hgetall(REDIS_CACHE_ITEMS_KEY)
-            items_with_time = []
-            
-            for cache_key, item_json in all_items.items():
-                try:
-                    item_data = json.loads(item_json)
-                    items_with_time.append((item_data["downloaded_at"], cache_key, item_data))
-                except json.JSONDecodeError as e:
-                    logger.warning(f"Failed to parse item data for {cache_key}: {e}")
-                    continue
-            
-            # Sort by download time and return oldest
-            items_with_time.sort(key=lambda x: x[0])
-            return [item_data for _, _, item_data in items_with_time[:count]]
-            
-        except Exception as e:
-            logger.error(f"Error getting oldest items from Redis: {e}")
-            return []
-    
-    def acquire_cleanup_lock(self, timeout: int = 300) -> bool:
-        """Acquire a distributed lock for cleanup operations."""
-        try:
-            return self.redis.set(REDIS_CLEANUP_LOCK_KEY, f"cleanup_service_{os.getpid()}", nx=True, ex=timeout)
-        except Exception as e:
-            logger.error(f"Error acquiring cleanup lock: {e}")
-            return False
-    
-    def release_cleanup_lock(self) -> None:
-        """Release the distributed cleanup lock."""
-        try:
-            self.redis.delete(REDIS_CLEANUP_LOCK_KEY)
-        except Exception as e:
-            logger.error(f"Error releasing cleanup lock: {e}")
-    
-    def remove_cache_item(self, cache_key: str) -> int:
-        """Remove a cache item from Redis and return its size."""
-        try:
-            # Get item data before removing
-            item_json = self.redis.hget(REDIS_CACHE_ITEMS_KEY, cache_key)
-            if not item_json:
-                return 0
-                
-            item_data = json.loads(item_json)
-            size_bytes = item_data.get("size_bytes", 0)
-            
-            # Remove item and update total bytes atomically
-            with self.redis.pipeline() as pipe:
-                pipe.hdel(REDIS_CACHE_ITEMS_KEY, cache_key)
-                pipe.decrby(REDIS_TOTAL_BYTES_KEY, size_bytes)
-                pipe.execute()
-            
-            logger.debug(f"Removed cache item from Redis: {cache_key}")
-            return size_bytes
-            
-        except Exception as e:
-            logger.error(f"Error removing item from Redis cache index: {e}")
-            return 0
+            logger.error(f"Error getting disk usage: {e}")
+            return 0, 0, 0.0
     
     def cleanup_cache(self) -> None:
-        """Perform cache cleanup by removing oldest files."""
-        current_size = self.get_total_bytes()
-        cleanup_threshold_size = int(MAX_CACHE_SIZE * CLEANUP_THRESHOLD)
+        """Perform cache cleanup by removing oldest files based on disk usage."""
+        # Check current disk usage
+        used_bytes, total_bytes, usage_percent = self.get_volume_usage()
         
-        if current_size <= cleanup_threshold_size:
+        logger.debug(f"Volume usage: {usage_percent:.1f}% ({used_bytes / 1024 / 1024:.0f}MB / {total_bytes / 1024 / 1024:.0f}MB)")
+        
+        # Check if cleanup is needed
+        if usage_percent < MAX_VOLUME_PERCENT:
             return
         
-        # Try to acquire cleanup lock
-        if not self.acquire_cleanup_lock(timeout=300):
-            logger.info("Another process is already cleaning cache, skipping")
-            return
+        logger.info(f"Volume usage {usage_percent:.1f}% exceeds threshold {MAX_VOLUME_PERCENT}%, starting cleanup")
+        
+        # Calculate target usage in bytes
+        target_usage_bytes = int((CLEAN_TO_PERCENT / 100) * total_bytes)
+        bytes_to_free = used_bytes - target_usage_bytes
+        
+        logger.info(f"Need to free {bytes_to_free / 1024 / 1024:.0f}MB to reach {CLEAN_TO_PERCENT}% usage")
+        
+        # Scan files and collect only what we need to delete
+        # We'll keep a max-heap of the oldest files until we have enough to meet our target
+        files_to_delete = []  # max-heap of (-mtime, file_path, file_size) - negative for max-heap
+        accumulated_size = 0
+        scanned_count = 0
+        
+        # We'll keep files until we've accumulated enough space, plus a 20% buffer
+        target_accumulated = int(bytes_to_free * 1.2)
         
         try:
-            # Double-check size after acquiring lock
-            current_size = self.get_total_bytes()
-            if current_size <= cleanup_threshold_size:
-                logger.info("Cache was cleaned by another process while waiting for lock")
-                return
+            logger.info(f"Scanning cache directory: {CACHE_DIR}")
             
-            # Calculate target size and bytes to free
-            target_size = int(MAX_CACHE_SIZE * CLEANUP_TARGET)
-            bytes_to_free = current_size - target_size
-            
-            logger.info(f"cache cleanup start: {format_bytes_mb(current_size)}MB, target {format_bytes_mb(target_size)}MB")
-            
-            # Get oldest items
-            oldest_items = self.get_oldest_items(1000)  # Get up to 1000 oldest items
-            
-            freed_bytes = 0
-            removed_count = 0
-            
-            for item_data in oldest_items:
-                if freed_bytes >= bytes_to_free:
-                    break
-                
+            for file_path in CACHE_DIR.rglob('*'):
+                if not file_path.is_file():
+                    continue
+                    
                 try:
-                    file_path = Path(item_data["file_path"])
-                    cache_key = item_data["cache_key"]
+                    stat = file_path.stat()
+                    scanned_count += 1
                     
-                    # Remove the physical file
-                    if file_path.exists():
-                        file_path.unlink()
-                        logger.debug(f"Removed cache file: {file_path}")
+                    if accumulated_size < target_accumulated:
+                        # Still accumulating - add to heap
+                        heapq.heappush(files_to_delete, (-stat.st_mtime, file_path, stat.st_size))
+                        accumulated_size += stat.st_size
                     else:
-                        logger.debug(f"Cache file already missing: {file_path}")
+                        # We have enough accumulated - only add if this file is older than the newest in heap
+                        if files_to_delete and -stat.st_mtime > files_to_delete[0][0]:
+                            # This file is older, replace the newest file in heap
+                            removed_mtime, removed_path, removed_size = heapq.heappop(files_to_delete)
+                            heapq.heappush(files_to_delete, (-stat.st_mtime, file_path, stat.st_size))
+                            accumulated_size = accumulated_size - removed_size + stat.st_size
                     
-                    # Remove from Redis index
-                    item_size = self.remove_cache_item(cache_key)
-                    if item_size > 0:
-                        freed_bytes += item_size
-                        removed_count += 1
-                    
+                    # Log progress every 10000 files
+                    if scanned_count % 10000 == 0:
+                        logger.info(f"Scanned {scanned_count} files, tracking {len(files_to_delete)} for deletion...")
+                        
                 except Exception as e:
-                    logger.warning(f"Failed to remove cache file {item_data.get('file_path', 'unknown')}: {e}")
-                    # Still try to remove from index
-                    self.remove_cache_item(item_data.get('cache_key', ''))
+                    logger.warning(f"Error getting stats for {file_path}: {e}")
+                    continue
             
-            final_size = self.get_total_bytes()
-            logger.info(f"cache cleanup end: {format_bytes_mb(final_size)}MB, target {format_bytes_mb(target_size)}MB")
+            logger.info(f"Scanned {scanned_count} total files, selected {len(files_to_delete)} oldest files for deletion")
             
-        finally:
-            self.release_cleanup_lock()
+        except Exception as e:
+            logger.error(f"Error during file scanning: {e}")
+            return
+        
+        # Delete files (they're already in the right order - oldest first due to max-heap)
+        # Convert to min-heap to pop oldest first
+        min_heap = [(-mtime, path, size) for mtime, path, size in files_to_delete]
+        heapq.heapify(min_heap)
+        
+        freed_bytes = 0
+        removed_count = 0
+        
+        logger.info("Starting file deletion...")
+        while min_heap and freed_bytes < bytes_to_free:
+            neg_mtime, file_path, file_size = heapq.heappop(min_heap)
+            
+            try:
+                file_path.unlink()
+                freed_bytes += file_size
+                removed_count += 1
+                
+                if removed_count % 1000 == 0:
+                    logger.info(f"Removed {removed_count} files, freed {freed_bytes / 1024 / 1024:.0f}MB so far...")
+                    
+            except Exception as e:
+                logger.warning(f"Failed to remove {file_path}: {e}")
+        
+        # Get final disk usage
+        final_used, final_total, final_percent = self.get_volume_usage()
+        
+        logger.info(f"Cleanup complete: removed {removed_count} files, freed {freed_bytes / 1024 / 1024:.0f}MB")
+        logger.info(f"Final volume usage: {final_percent:.1f}%")
     
     def run(self) -> None:
         """Main service loop."""
         logger.info(f"Cache cleanup service started (PID: {os.getpid()})")
-        logger.info(f"Cache limit: {format_bytes_mb(MAX_CACHE_SIZE)}MB")
-        logger.info(f"Cleanup threshold: {CLEANUP_THRESHOLD * 100:.0f}%")
-        logger.info(f"Cleanup target: {CLEANUP_TARGET * 100:.0f}%")
+        logger.info(f"Cache directory: {CACHE_DIR}")
+        logger.info(f"Max volume usage threshold: {MAX_VOLUME_PERCENT}%")
+        logger.info(f"Cleanup target: {CLEAN_TO_PERCENT}%")
         logger.info(f"Check interval: {CLEANUP_INTERVAL} seconds")
         
         while self.running:
