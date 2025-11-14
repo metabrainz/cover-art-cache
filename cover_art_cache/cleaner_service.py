@@ -27,8 +27,8 @@ logger = logging.getLogger('cleanup_service')
 # Configuration
 CACHE_DIR = Path(os.environ.get("COVER_ART_CACHE_DIR", "/cover-art-cache"))
 CLEANUP_INTERVAL = int(os.environ.get('COVER_ART_CACHE_CLEANUP_INTERVAL', '300'))  # Default 5 minutes
-MAX_VOLUME_PERCENT = int(os.environ.get('COVER_ART_CACHE_MAX_VOLUME_PERCENT', '80'))
-CLEAN_TO_PERCENT = int(os.environ.get('COVER_ART_CACHE_CLEAN_TO_PERCENT', '75'))
+MAX_SIZE_MB = int(os.environ.get('COVER_ART_CACHE_MAX_SIZE_MB', '10000'))  # Default 10GB
+CLEAN_TO_MB = int(os.environ.get('COVER_ART_CACHE_CLEAN_TO_MB', '8000'))  # Default 8GB
 
 class CacheCleanupService:
     """Service that manages cache cleanup operations based on disk usage."""
@@ -45,38 +45,45 @@ class CacheCleanupService:
         logger.info(f"Received signal {signum}, shutting down...")
         self.running = False
     
-    def get_volume_usage(self) -> Tuple[int, int, float]:
-        """Get disk usage statistics for the cache volume.
+    def get_cache_size(self) -> int:
+        """Get total size of cached files in bytes.
         
         Returns:
-            Tuple of (used_bytes, total_bytes, usage_percent)
+            Total size of cache in bytes
         """
         try:
-            stat = shutil.disk_usage(CACHE_DIR)
-            usage_percent = (stat.used / stat.total) * 100
-            return stat.used, stat.total, usage_percent
+            total_size = 0
+            for file_path in CACHE_DIR.rglob('*'):
+                if file_path.is_file():
+                    try:
+                        total_size += file_path.stat().st_size
+                    except Exception:
+                        continue
+            return total_size
         except Exception as e:
-            logger.error(f"Error getting disk usage: {e}")
-            return 0, 0, 0.0
+            logger.error(f"Error calculating cache size: {e}")
+            return 0
     
     def cleanup_cache(self) -> None:
-        """Perform cache cleanup by removing oldest files based on disk usage."""
-        # Check current disk usage
-        used_bytes, total_bytes, usage_percent = self.get_volume_usage()
+        """Perform cache cleanup by removing oldest files based on cache size."""
+        # Check current cache size
+        cache_size_bytes = self.get_cache_size()
+        cache_size_mb = cache_size_bytes / 1024 / 1024
         
-        logger.info(f"Volume usage: {usage_percent:.1f}% ({used_bytes / 1024 / 1024:.0f}MB / {total_bytes / 1024 / 1024:.0f}MB)")
+        logger.info(f"Cache size: {cache_size_mb:.0f}MB")
         
         # Check if cleanup is needed
-        if usage_percent < MAX_VOLUME_PERCENT:
+        max_size_bytes = MAX_SIZE_MB * 1024 * 1024
+        if cache_size_bytes < max_size_bytes:
             return
         
-        logger.info(f"Volume usage {usage_percent:.1f}% exceeds threshold {MAX_VOLUME_PERCENT}%, starting cleanup")
+        logger.info(f"Cache size {cache_size_mb:.0f}MB exceeds threshold {MAX_SIZE_MB}MB, starting cleanup")
         
-        # Calculate target usage in bytes
-        target_usage_bytes = int((CLEAN_TO_PERCENT / 100) * total_bytes)
-        bytes_to_free = used_bytes - target_usage_bytes
+        # Calculate bytes to free
+        target_size_bytes = CLEAN_TO_MB * 1024 * 1024
+        bytes_to_free = cache_size_bytes - target_size_bytes
         
-        logger.info(f"Need to free {bytes_to_free / 1024 / 1024:.0f}MB to reach {CLEAN_TO_PERCENT}% usage")
+        logger.info(f"Need to free {bytes_to_free / 1024 / 1024:.0f}MB to reach {CLEAN_TO_MB}MB")
         
         # Scan files and collect only what we need to delete
         # We'll keep a max-heap of the oldest files until we have enough to meet our target
@@ -147,18 +154,19 @@ class CacheCleanupService:
             except Exception as e:
                 logger.warning(f"Failed to remove {file_path}: {e}")
         
-        # Get final disk usage
-        final_used, final_total, final_percent = self.get_volume_usage()
+        # Get final cache size
+        final_cache_size = self.get_cache_size()
+        final_cache_mb = final_cache_size / 1024 / 1024
         
         logger.info(f"Cleanup complete: removed {removed_count} files, freed {freed_bytes / 1024 / 1024:.0f}MB")
-        logger.info(f"Final volume usage: {final_percent:.1f}%")
+        logger.info(f"Final cache size: {final_cache_mb:.0f}MB")
     
     def run(self) -> None:
         """Main service loop."""
         logger.info(f"Cache cleanup service started (PID: {os.getpid()})")
         logger.info(f"Cache directory: {CACHE_DIR}")
-        logger.info(f"Max volume usage threshold: {MAX_VOLUME_PERCENT}%")
-        logger.info(f"Cleanup target: {CLEAN_TO_PERCENT}%")
+        logger.info(f"Max cache size threshold: {MAX_SIZE_MB}MB")
+        logger.info(f"Cleanup target: {CLEAN_TO_MB}MB")
         logger.info(f"Check interval: {CLEANUP_INTERVAL} seconds")
         
         while self.running:
