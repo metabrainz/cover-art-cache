@@ -12,6 +12,7 @@ import sys
 from urllib.parse import urlparse
 
 from flask import Flask, Response, request, jsonify
+from werkzeug.exceptions import BadRequest
 import requests
 
 #TODO: Check to see about bitmmap's concern: what happens if two processes try to download/cache the same file concurrently. 
@@ -166,19 +167,19 @@ def download_item(url: str, cache_path: Path) -> bool:
 
 def resolve_redirect(coverart_url: str) -> str:
     """Resolve the redirect from coverartarchive.org to get the actual image URL."""
-    logger.info(coverart_url)
     try:
         response = requests.head(coverart_url, timeout=30, allow_redirects=False)
         
         if response.status_code in (301, 302, 307, 308):
             location = response.headers.get('Location')
             if location:
-                logger.info("image location" + str(location))
                 return location
             else:
                 raise ValueError("No redirect location found")
         elif response.status_code == 404:
             raise FileNotFoundError("Cover art not found")
+        elif response.status_code == 400:
+            raise BadRequest(response.text)
         else:
             raise RuntimeError(f"Unexpected response from coverartarchive.org: {response.status_code}")
             
@@ -229,7 +230,6 @@ def handle_coverart_request(url_path: str):
     
     # Get cache path - try to find existing cached file with any extension
     base_cache_path = get_cache_path_for_url(url_path)
-    logger.info(base_cache_path)
     
     # Check if we already have this cached (try common extensions)
     for ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.pdf', '']:
@@ -242,7 +242,6 @@ def handle_coverart_request(url_path: str):
                 "Cache-Control": "public, max-age=31536000",  # 1 year
                 "X-Cache-Status": "HIT"
             }
-            logger.info(str(headers))
             return Response("", headers=headers)
     
     # Cache miss - need to download the image
@@ -268,7 +267,6 @@ def handle_coverart_request(url_path: str):
                 "Cache-Control": "public, max-age=31536000",  # 1 year
                 "X-Cache-Status": "MISS"
             }
-            logger.info(str(headers))
             return Response("", headers=headers)
         else:
             return jsonify({"error": "Failed to download image"}), 502
