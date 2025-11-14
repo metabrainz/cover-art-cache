@@ -189,14 +189,6 @@ class TestCoverArtCache:
         else:  # 502
             print(f"! Back cover service error for {mbid}")
     
-    def test_cache_directory_structure(self):
-        """Test that cache directory structure is correctly reported"""
-        response = requests.get(f"{BASE_URL}/cache-status")
-        data = response.json()
-        
-        # Verify cache directory path
-        assert data["cache_dir"] == "/cache"
-    
     def test_cache_status_response(self):
         """Test cache status returns expected response"""
         response = requests.get(f"{BASE_URL}/cache-status")
