@@ -18,7 +18,6 @@ load_dotenv()
 # Configuration
 VIRTUAL_HOST = os.environ.get('VIRTUAL_HOST', 'localhost')
 BASE_URL = f"https://{VIRTUAL_HOST}"
-MBID_PATTERN = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
 MBID_FILE = "release_mbids.txt"
 
 def load_mbids():
@@ -39,10 +38,7 @@ def load_mbids():
             
             # Remove quotes if present and strip whitespace
             mbid = line.strip('"\'').strip()
-            
-            # Validate MBID format
-            if MBID_PATTERN.match(mbid):
-                mbids.append(mbid)
+            mbids.append(mbid)
     
     return mbids
 
