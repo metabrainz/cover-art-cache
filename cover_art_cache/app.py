@@ -166,12 +166,14 @@ def download_item(url: str, cache_path: Path) -> bool:
 
 def resolve_redirect(coverart_url: str) -> str:
     """Resolve the redirect from coverartarchive.org to get the actual image URL."""
+    logger.info(coverart_url)
     try:
         response = requests.head(coverart_url, timeout=30, allow_redirects=False)
         
         if response.status_code in (301, 302, 307, 308):
             location = response.headers.get('Location')
             if location:
+                logger.info("image location" + str(location))
                 return location
             else:
                 raise ValueError("No redirect location found")
@@ -287,12 +289,13 @@ def index():
 @app.route("/release/<path:url_path>")
 def get_release(url_path):
     """Handle all release cover art requests."""
-    logger.info("handle release request")
+    logger.info("handle release request 'release/%s'" % url_path)
     return handle_coverart_request(f"release/{url_path}")
 
 @app.route("/release-group/<path:url_path>")
 def get_release_group(url_path):
     """Handle all release-group cover art requests."""
+    logger.info("handle release group request 'release-group/%s'" % url_path)
     return handle_coverart_request(f"release-group/{url_path}")
 
 logger.info("Cover Art Cache Service ready...")

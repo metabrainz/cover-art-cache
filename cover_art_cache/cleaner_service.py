@@ -64,7 +64,7 @@ class CacheCleanupService:
         # Check current disk usage
         used_bytes, total_bytes, usage_percent = self.get_volume_usage()
         
-        logger.debug(f"Volume usage: {usage_percent:.1f}% ({used_bytes / 1024 / 1024:.0f}MB / {total_bytes / 1024 / 1024:.0f}MB)")
+        logger.info(f"Volume usage: {usage_percent:.1f}% ({used_bytes / 1024 / 1024:.0f}MB / {total_bytes / 1024 / 1024:.0f}MB)")
         
         # Check if cleanup is needed
         if usage_percent < MAX_VOLUME_PERCENT:
