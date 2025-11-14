@@ -6,6 +6,7 @@ A comprehensive test suite that replaces test.sh with proper Python testing infr
 """
 
 import json
+import os
 import time
 import pytest
 import requests
@@ -14,7 +15,8 @@ from typing import Dict, List, Tuple
 import re
 
 # Test configuration
-BASE_URL = "https://mayhem-chaos.net"
+VIRTUAL_HOST = os.environ.get('VIRTUAL_HOST', 'localhost')
+BASE_URL = f"https://{VIRTUAL_HOST}"
 TEST_DATA_FILE = "test_data.json"
 MBID_PATTERN = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
 

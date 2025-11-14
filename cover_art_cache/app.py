@@ -14,8 +14,6 @@ from urllib.parse import urlparse
 from flask import Flask, Response, request, jsonify
 import requests
 
-#TODO: Check to see about bitmmap's concern: what happens if two processes try to download/cache the same file concurrently. 
-
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -152,10 +150,16 @@ def download_item(url: str, cache_path: Path) -> bool:
         # Ensure parent directory exists
         cache_path.parent.mkdir(parents=True, exist_ok=True)
         
-        # Write file
-        with open(cache_path, 'wb') as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                f.write(chunk)
+        # Try to open file in exclusive write mode
+        # This prevents concurrent writes to the same file
+        try:
+            # Use 'x' mode which fails if file already exists (exclusive creation)
+            with open(cache_path, 'xb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
+        except FileExistsError:
+            # Another process is already writing this file, just return success
+            return True
         
         return True
         
